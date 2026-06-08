@@ -17,7 +17,7 @@ if (DB_CONN) {
       idle: 10_000,
     },
     dialectOptions: {
-      ssl: process.env.DB_SSL === 'true' ? { require: true, rejectUnauthorized: false } : false,
+      ssl: { require: true, rejectUnauthorized: false },
       statement_timeout: 10_000,  // query נהרג אחרי 10 שניות
     },
   });
