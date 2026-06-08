@@ -17,7 +17,7 @@ if (DB_CONN) {
       idle: 10_000,
     },
     dialectOptions: {
-      ssl: { require: true, rejectUnauthorized: false },
+      ssl: false,
       statement_timeout: 10_000,  // query נהרג אחרי 10 שניות
     },
   });
