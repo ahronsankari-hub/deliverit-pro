@@ -7,19 +7,21 @@ let sequelize;
 const DB_CONN = process.env.DB_URL || process.env.DATABASE_URL;
 if (DB_CONN) {
   // Production: PostgreSQL
+  // Railway's proxy (acela.proxy.rlwy.net) — no SSL at the proxy layer
+  const sslConfig = process.env.DB_SSL === 'true'
+    ? { require: true, rejectUnauthorized: false }
+    : undefined;
+
   sequelize = new Sequelize(DB_CONN, {
     dialect: 'postgres',
     logging: false,
     pool: {
-      max: 20,          // עד 20 חיבורים במקביל
-      min: 2,
-      acquire: 30_000,
+      max: 10,
+      min: 0,           // לא ליצור חיבורים עד שצריך
+      acquire: 60_000,  // המתן עד דקה
       idle: 10_000,
     },
-    dialectOptions: {
-      ssl: false,
-      statement_timeout: 10_000,  // query נהרג אחרי 10 שניות
-    },
+    dialectOptions: sslConfig ? { ssl: sslConfig } : {},
   });
 } else {
   // Development: SQLite
