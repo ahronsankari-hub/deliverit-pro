@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { io } from 'socket.io-client';
 import { reqApi, bidApi, courierApi, authApi, uploadApi, reviewApi } from '../services/api';
 
 const TENDER_CFG: Record<string,{label:string;color:string;emoji:string;urgency:string;glow:string}> = {
@@ -46,6 +47,8 @@ export default function CourierDashboard() {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText]     = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [newTenderAlert, setNewTenderAlert] = useState<any>(null);
+  const [lowerPrices, setLowerPrices] = useState<Record<string,string>>({});
 
   const load = useCallback(async () => {
     const [me, reqs, bids, st] = await Promise.all([authApi.me(), reqApi.list(), bidApi.myBids(), courierApi.stats()]);
@@ -54,6 +57,20 @@ export default function CourierDashboard() {
 
   useEffect(() => { load(); }, []);
   useEffect(() => { const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+
+  // Socket.io — מכרזים חדשים + הורדת מחירים בזמן אמת
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL?.replace('/api','') || 'http://localhost:5000';
+    const socket = io(API_URL, { transports: ['websocket','polling'] });
+    socket.on('tender:new', (data: any) => {
+      setNewTenderAlert(data);
+      load(); // רענן רשימה
+      setTimeout(() => setNewTenderAlert(null), 8000);
+    });
+    socket.on('bid:lowered', () => load());
+    socket.on('request:new',  () => load());
+    return () => { socket.disconnect(); };
+  }, [load]);
 
   useEffect(() => {
     if (!online || !navigator.geolocation) return;
@@ -106,9 +123,34 @@ export default function CourierDashboard() {
   const filtered = filter === 'all' ? requests : requests.filter(r => r.tenderType === filter);
   const activeBids = myBids.filter(b => b.status==='accepted' && ['assigned','picked_up','in_transit'].includes(b.request?.status));
 
+  const handleLowerBid = async (requestId: string) => {
+    const newPrice = parseFloat(lowerPrices[requestId]||'0');
+    if (!newPrice) return alert('הזן מחיר');
+    try {
+      await bidApi.lowerBid(requestId, newPrice);
+      setLowerPrices(p => ({...p, [requestId]: ''}));
+      await load();
+    } catch(e:any) { alert(e.response?.data?.message||'שגיאה'); }
+  };
+
   return (
     <>
-    <div style={{ minHeight:'100vh', background:'#0A0F1E', paddingBottom:100 }}>
+    {/* 🚨 New Tender Alert Banner */}
+    {newTenderAlert && (
+      <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, background:'linear-gradient(135deg,#FF6B35,#FF4444)', padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', boxShadow:'0 4px 20px rgba(255,107,53,0.5)', animation:'slideDown 0.3s ease' }}>
+        <div>
+          <div style={{ color:'white', fontWeight:900, fontSize:16 }}>🚨 מכרז חדש!</div>
+          <div style={{ color:'rgba(255,255,255,0.85)', fontSize:13 }}>{newTenderAlert.title} • {newTenderAlert.pickupAddress} → {newTenderAlert.dropoffAddress}</div>
+          {newTenderAlert.maxBudget && <div style={{ color:'rgba(255,255,255,0.7)', fontSize:12 }}>תקציב: עד ₪{newTenderAlert.maxBudget}</div>}
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={() => { setTab('market'); setNewTenderAlert(null); }}
+            style={{ padding:'8px 16px', borderRadius:12, border:'2px solid white', background:'white', color:'#FF4444', fontWeight:900, fontSize:13, cursor:'pointer' }}>הצע עכשיו!</button>
+          <button onClick={() => setNewTenderAlert(null)} style={{ background:'transparent', border:'none', color:'white', fontSize:20, cursor:'pointer', padding:'4px 8px' }}>✕</button>
+        </div>
+      </div>
+    )}
+    <div style={{ minHeight:'100vh', background:'#0A0F1E', paddingBottom:100, paddingTop: newTenderAlert ? 80 : 0 }}>
       {/* Header */}
       <header style={{ background:'rgba(255,255,255,0.03)', borderBottom:'1px solid rgba(255,255,255,0.06)', backdropFilter:'blur(20px)', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ padding:'0 20px', display:'flex', alignItems:'center', justifyContent:'space-between', height:60 }}>
@@ -403,7 +445,24 @@ export default function CourierDashboard() {
                   <span style={{ color:'#FF6B35', fontWeight:900, fontSize:20 }}>₪{bid.price}</span>
                 </div>
                 <div style={{ color:'white', fontWeight:700, fontSize:15, marginBottom:4 }}>{bid.request?.title}</div>
-                <div style={{ color:'rgba(255,255,255,0.3)', fontSize:12 }}>{bid.request?.dropoffAddress}</div>
+                <div style={{ color:'rgba(255,255,255,0.3)', fontSize:12, marginBottom:10 }}>{bid.request?.dropoffAddress}</div>
+
+                {/* הורד מחיר — רק אם הצעה עדיין ממתינה */}
+                {bid.status === 'pending' && bid.request?.status !== 'assigned' && (
+                  <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:8, padding:'10px 12px', background:'rgba(245,158,11,0.05)', borderRadius:12, border:'1px solid rgba(245,158,11,0.15)' }}>
+                    <span style={{ color:'rgba(255,255,255,0.5)', fontSize:12, fontWeight:700, whiteSpace:'nowrap' }}>💸 הורד ל:</span>
+                    <input
+                      type="number" min="1" placeholder={`מתחת ל-₪${bid.price}`}
+                      value={lowerPrices[bid.request?.id||'']||''}
+                      onChange={e => setLowerPrices(p=>({...p,[bid.request?.id||'']:e.target.value}))}
+                      style={{ flex:1, padding:'8px 12px', borderRadius:10, border:'1px solid rgba(245,158,11,0.3)', background:'rgba(255,255,255,0.05)', color:'white', fontSize:14, outline:'none', fontFamily:'inherit' }}
+                    />
+                    <button onClick={() => handleLowerBid(bid.request?.id||'')}
+                      style={{ padding:'8px 14px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#F59E0B,#EF4444)', color:'white', fontWeight:800, fontSize:13, cursor:'pointer', whiteSpace:'nowrap' }}>
+                      הורד 🔥
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })

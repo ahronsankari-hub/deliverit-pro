@@ -82,4 +82,14 @@ export const paymentApi = {
   status:   (requestId: string) => api.get(`/payments/status/${requestId}`),
 };
 
+export const aiApi = {
+  analyze:      (imageUrls: string[]) => api.post('/ai/analyze', { imageUrls }),
+  suggestPrice: (params: object)      => api.post('/ai/suggest-price', params),
+};
+
+export const bidApi = {
+  lowerBid: (requestId: string, newPrice: number) =>
+    api.patch(`/requests/${requestId}/bids/lower`, { newPrice }),
+};
+
 export default api;

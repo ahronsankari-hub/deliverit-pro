@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
-import { reqApi } from '../services/api';
+import { useState, useRef, type FormEvent } from 'react';
+import { X, Camera, Sparkles, TrendingDown } from 'lucide-react';
+import { reqApi, aiApi } from '../services/api';
+import api from '../services/api';
 
 const VEHICLE_SPECS = [
   { type:'scooter',    emoji:'🛵', label:'קטנוע',        maxKg:5,     color:'#FF6B35', desc:'מסמכים, אוכל, מעטפות' },
@@ -36,6 +37,12 @@ const card = (active:boolean, color='#FF6B35'): React.CSSProperties => ({
 export default function NewRequestModal({ onClose, onCreated }: { onClose:()=>void; onCreated:()=>void }) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState<any>(null);
+  const [aiPrice, setAiPrice] = useState<any>(null);
+  const [pricingAI, setPricingAI] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     title:'', description:'', packageType:'food',
     weightKg:'', lengthCm:'', widthCm:'', heightCm:'',
@@ -52,6 +59,64 @@ export default function NewRequestModal({ onClose, onCreated }: { onClose:()=>vo
     quantity:'1',
   });
   const f = (k:string, v:any) => setForm(p => ({...p,[k]:v}));
+
+  // העלאת תמונות לשרת
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const uploaded: string[] = [];
+    for (const file of files.slice(0, 4)) {
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        const { data } = await api.post('/upload/single', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        if (data.url) uploaded.push(data.url);
+      } catch {}
+    }
+    setPhotos(p => [...p, ...uploaded].slice(0, 4));
+  };
+
+  // ניתוח AI של תמונות
+  const analyzeWithAI = async () => {
+    if (!photos.length) return;
+    setAnalyzing(true); setAiResult(null);
+    try {
+      const { data } = await aiApi.analyze(photos);
+      setAiResult(data);
+      // מלא טופס אוטומטית
+      if (data.estimatedWeightKg) f('weightKg', String(data.estimatedWeightKg));
+      if (data.estimatedLengthCm) f('lengthCm', String(data.estimatedLengthCm));
+      if (data.estimatedWidthCm)  f('widthCm',  String(data.estimatedWidthCm));
+      if (data.estimatedHeightCm) f('heightCm', String(data.estimatedHeightCm));
+      if (data.cargoType && data.cargoType !== 'other') {
+        const typeMap: Record<string,string> = { carton:'carton', pallet:'pallet', food:'food', envelope:'envelope', sack:'sack' };
+        if (typeMap[data.cargoType]) f('packageType', typeMap[data.cargoType]);
+      }
+      if (data.isFragile) f('isFragile', true);
+      if (data.description && !form.title) f('title', data.description);
+    } catch {}
+    setAnalyzing(false);
+  };
+
+  // הצעת מחיר AI
+  const suggestPriceWithAI = async () => {
+    setPricingAI(true); setAiPrice(null);
+    try {
+      const { data } = await aiApi.suggestPrice({
+        weightKg: parseFloat(form.weightKg)||1,
+        cargoType: form.packageType,
+        requiredVehicle: effectiveVehicle,
+        pickupAddress: form.pickupAddress || 'ישראל',
+        dropoffAddress: form.dropoffAddress || 'ישראל',
+        isFragile: form.isFragile,
+        isUrgent: form.isUrgent,
+        isHazardous: form.hazardous,
+      });
+      setAiPrice(data);
+      if (data.minPrice) f('minBudget', String(data.minPrice));
+      if (data.maxPrice) f('maxBudget', String(data.maxPrice));
+    } catch {}
+    setPricingAI(false);
+  };
 
   const selectedType = PACKAGE_TYPES.find(p => p.value === form.packageType)!;
   const autoVehicle = () => {
@@ -146,6 +211,58 @@ export default function NewRequestModal({ onClose, onCreated }: { onClose:()=>vo
                   ))}
                 </div>
               </div>
+
+              {/* ── AI Photo Analysis (for carton/pallet/freight or >3kg) ── */}
+              {(['carton','pallet','freight','sack'].includes(form.packageType) || parseFloat(form.weightKg||'0') > 3) && (
+                <div style={{ background:'linear-gradient(135deg,#9F7AEA15,#6B46C115)', border:'2px solid #9F7AEA40', borderRadius:16, padding:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+                    <Sparkles size={20} color="#9F7AEA" />
+                    <span style={{ fontWeight:800, fontSize:15, color:'#6B46C1' }}>🤖 ניתוח AI — צרף תמונות</span>
+                    <span style={{ fontSize:11, color:'#999', marginRight:'auto' }}>AI יזהה מה זה ויציע מידות ורכב</span>
+                  </div>
+
+                  {/* Photo grid */}
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
+                    {photos.map((url, i) => (
+                      <div key={i} style={{ position:'relative', width:70, height:70 }}>
+                        <img src={url} alt="" style={{ width:70, height:70, objectFit:'cover', borderRadius:10, border:'2px solid #9F7AEA' }} />
+                        <button type="button" onClick={() => setPhotos(p => p.filter((_,j)=>j!==i))}
+                          style={{ position:'absolute', top:-6, right:-6, width:20, height:20, borderRadius:'50%', background:'#ef4444', border:'none', cursor:'pointer', color:'white', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900 }}>×</button>
+                      </div>
+                    ))}
+                    {photos.length < 4 && (
+                      <button type="button" onClick={() => fileRef.current?.click()}
+                        style={{ width:70, height:70, borderRadius:10, border:'2px dashed #9F7AEA', background:'white', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
+                        <Camera size={22} color="#9F7AEA" />
+                        <span style={{ fontSize:10, color:'#9F7AEA', fontWeight:700 }}>הוסף</span>
+                      </button>
+                    )}
+                    <input ref={fileRef} type="file" accept="image/*" multiple style={{ display:'none' }} onChange={handlePhotoUpload} />
+                  </div>
+
+                  {photos.length > 0 && (
+                    <button type="button" onClick={analyzeWithAI} disabled={analyzing}
+                      style={{ width:'100%', padding:'10px 0', borderRadius:12, border:'none', background: analyzing ? '#ccc':'linear-gradient(135deg,#9F7AEA,#6B46C1)', color:'white', fontWeight:800, fontSize:14, cursor: analyzing?'wait':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                      <Sparkles size={16} />
+                      {analyzing ? '⏳ מנתח...' : '✨ נתח עם AI'}
+                    </button>
+                  )}
+
+                  {/* AI Result */}
+                  {aiResult && (
+                    <div style={{ marginTop:10, background:'white', borderRadius:12, padding:12, border:'2px solid #9F7AEA' }}>
+                      <p style={{ margin:'0 0 6px', fontWeight:800, color:'#6B46C1', fontSize:13 }}>✅ תוצאות AI:</p>
+                      <p style={{ margin:'0 0 4px', fontSize:13, color:'#333' }}>📦 {aiResult.aiSummary}</p>
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:6 }}>
+                        {aiResult.estimatedWeightKg && <span style={{ background:'#9F7AEA20', padding:'4px 10px', borderRadius:20, fontSize:12, color:'#6B46C1', fontWeight:700 }}>⚖️ ~{aiResult.estimatedWeightKg} ק"ג</span>}
+                        {aiResult.recommendedVehicle && <span style={{ background:'#48BB7820', padding:'4px 10px', borderRadius:20, fontSize:12, color:'#276749', fontWeight:700 }}>🚗 {aiResult.recommendedVehicle}</span>}
+                        {aiResult.isFragile && <span style={{ background:'#FC818120', padding:'4px 10px', borderRadius:20, fontSize:12, color:'#C53030', fontWeight:700 }}>⚠️ שביר</span>}
+                      </div>
+                      <p style={{ margin:'6px 0 0', fontSize:11, color:'#888' }}>דיוק: {aiResult.confidence === 'high' ? 'גבוה 🟢' : aiResult.confidence === 'medium' ? 'בינוני 🟡' : 'נמוך 🔴'} — השדות מולאו אוטומטית</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* FOOD specific */}
               {form.packageType === 'food' && (
@@ -427,7 +544,24 @@ export default function NewRequestModal({ onClose, onCreated }: { onClose:()=>vo
               </div>
 
               <div style={{ background:'#fafafa', borderRadius:14, padding:18 }}>
-                <p style={{ margin:'0 0 14px', fontWeight:800, fontSize:15, color:'#333' }}>💰 תקציב מצופה (אופציונלי)</p>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                  <p style={{ margin:0, fontWeight:800, fontSize:15, color:'#333' }}>💰 תקציב מצופה (אופציונלי)</p>
+                  <button type="button" onClick={suggestPriceWithAI} disabled={pricingAI}
+                    style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:20, border:'2px solid #9F7AEA', background: pricingAI ? '#eee':'#9F7AEA15', cursor: pricingAI?'wait':'pointer', fontWeight:700, fontSize:12, color:'#6B46C1' }}>
+                    <TrendingDown size={14} />
+                    {pricingAI ? '⏳ מחשב...' : '🤖 הצעת מחיר AI'}
+                  </button>
+                </div>
+
+                {/* AI Price Result */}
+                {aiPrice && (
+                  <div style={{ background:'linear-gradient(135deg,#9F7AEA15,#6B46C115)', border:'2px solid #9F7AEA50', borderRadius:12, padding:12, marginBottom:12 }}>
+                    <p style={{ margin:'0 0 4px', fontWeight:800, color:'#6B46C1', fontSize:13 }}>🤖 AI מציע: ₪{aiPrice.minPrice}–₪{aiPrice.maxPrice}</p>
+                    <p style={{ margin:0, fontSize:12, color:'#555' }}>{aiPrice.explanation}</p>
+                    <p style={{ margin:'4px 0 0', fontSize:11, color:'#888' }}>המחיר מולא אוטומטית — שנה לפי רצונך</p>
+                  </div>
+                )}
+
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
                   <div><label style={lbl}>מינימום (₪)</label><input type="number" value={form.minBudget} onChange={e=>f('minBudget',e.target.value)} placeholder="20" style={inp} /></div>
                   <div><label style={lbl}>מקסימום (₪)</label><input type="number" value={form.maxBudget} onChange={e=>f('maxBudget',e.target.value)} placeholder="80" style={inp} /></div>

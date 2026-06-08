@@ -114,3 +114,96 @@ exports.myCourierBids = async (req, res) => {
     res.json(bids);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
+
+// ── Lower existing bid (courier) — במכרז פעיל ──────────────────────────────
+exports.lowerBid = async (req, res) => {
+  try {
+    const { newPrice } = req.body;
+    if (!newPrice || newPrice <= 0) return res.status(400).json({ message: 'מחיר לא תקין' });
+
+    const request = await DeliveryRequest.findByPk(req.params.requestId);
+    if (!request) return res.status(404).json({ message: 'בקשה לא נמצאה' });
+    if (!['open','bidding'].includes(request.status))
+      return res.status(400).json({ message: 'המכרז סגור' });
+    if (new Date() > new Date(request.biddingEndsAt))
+      return res.status(400).json({ message: 'זמן המכרז פג' });
+
+    const existing = await Bid.findOne({
+      where: { requestId: request.id, courierId: req.user.id, status: 'pending' }
+    });
+    if (!existing) return res.status(404).json({ message: 'אין הצעה קיימת להורדה' });
+    if (newPrice >= existing.price)
+      return res.status(400).json({ message: `יש להציע מחיר נמוך מ-₪${existing.price}` });
+
+    const oldPrice = existing.price;
+    await existing.update({ price: newPrice });
+
+    // עדכון real-time לכולם
+    req.io?.emit('bid:lowered', {
+      requestId: request.id,
+      bidId: existing.id,
+      courierId: req.user.id,
+      oldPrice,
+      newPrice,
+      courierName: req.user.name,
+    });
+
+    // שלח push לשולח
+    const wp = require('../utils/webpush');
+    wp.push(request.senderId, {
+      title: '💸 הצעה הורדה!',
+      body: `${req.user.name} הוריד ל-₪${newPrice} על "${request.title}"`,
+      url: '/',
+    });
+
+    res.json({ ok: true, bid: existing });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+// ── Notify all eligible couriers about new tender ───────────────────────────
+exports.notifyCouriers = async (requestId, io) => {
+  try {
+    const request = await DeliveryRequest.findByPk(requestId, {
+      include: [{ model: User, as: 'sender', attributes: ['name','companyName'] }]
+    });
+    if (!request) return;
+
+    // שליחת socket לכל השליחים
+    io?.emit('tender:new', {
+      requestId: request.id,
+      title: request.title,
+      requiredVehicle: request.requiredVehicle,
+      weightKg: request.weightKg,
+      pickupAddress: request.pickupAddress,
+      dropoffAddress: request.dropoffAddress,
+      biddingEndsAt: request.biddingEndsAt,
+      minBudget: request.minBudget,
+      maxBudget: request.maxBudget,
+      senderName: request.sender?.companyName || request.sender?.name,
+    });
+
+    // Push notification לשליחים רשומים
+    const { Op } = require('sequelize');
+    const VehicleProfile = require('../models').VehicleProfile;
+    const { canVehicleHandle } = require('../utils/tender');
+
+    const couriers = await User.findAll({
+      where: { role: 'courier', isActive: true },
+      include: [{ model: VehicleProfile, as: 'vehicle', required: true }],
+    });
+
+    const wp = require('../utils/webpush');
+    for (const c of couriers) {
+      if (canVehicleHandle(c.vehicle?.vehicleType, request.requiredVehicle)) {
+        wp.push(c.id, {
+          title: '🚨 מכרז חדש!',
+          body: `${request.title} — ${request.pickupAddress} ← ${request.dropoffAddress}`,
+          url: `/courier/bids/${requestId}`,
+        });
+      }
+    }
+  } catch (err) {
+    const logger = require('../utils/logger');
+    logger.warn('notifyCouriers failed', { error: err.message });
+  }
+};

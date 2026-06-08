@@ -61,6 +61,7 @@ app.use('/api/upload',   require('./routes/upload'));
 app.use('/api/push',     require('./routes/push'));
 app.use('/api/requests', require('./routes/invoices'));   // GET /api/requests/:id/invoice
 app.use('/api/payments', require('./routes/payments'));   // Stripe checkout + webhook
+app.use('/api/ai',       require('./routes/ai'));         // AI ניתוח חבילות + תמחור
 
 app.get('/',       (_, res) => res.json({ name: 'DeliverIt Pro API', version: '2.0.0', env: process.env.NODE_ENV }));
 app.get('/health', async (_, res) => {

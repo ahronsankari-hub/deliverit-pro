@@ -26,6 +26,11 @@ exports.create = async (req, res) => {
     });
 
     req.io?.emit('request:new', { id: request.id, tenderType, requiredVehicle });
+
+    // שלח notifications לשליחים מתאימים ברקע
+    const { notifyCouriers } = require('./bidController');
+    notifyCouriers(request.id, req.io).catch(() => {});
+
     res.status(201).json(request);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };

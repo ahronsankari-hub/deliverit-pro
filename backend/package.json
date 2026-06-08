@@ -4,9 +4,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev":   "node src/server.js",
-    "seed":  "node seed.js",
-    "test":  "echo \"no tests\" && exit 0"
+    "dev": "node src/server.js",
+    "seed": "node seed.js",
+    "test": "echo \"no tests\" && exit 0"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -16,6 +16,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
