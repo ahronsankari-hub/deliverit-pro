@@ -3,26 +3,37 @@ const path = require('path');
 
 let sequelize;
 
-// תמיכה ב-DB_URL (מקומי) ו-DATABASE_URL (Railway)
+// תמיכה ב-DB_URL, DATABASE_URL, ו-PG* variables (Railway)
 const DB_CONN = process.env.DB_URL || process.env.DATABASE_URL;
-if (DB_CONN) {
-  // Production: PostgreSQL
-  // Railway's proxy (acela.proxy.rlwy.net) — no SSL at the proxy layer
-  const sslConfig = process.env.DB_SSL === 'true'
-    ? { require: true, rejectUnauthorized: false }
-    : undefined;
 
-  sequelize = new Sequelize(DB_CONN, {
+if (DB_CONN || process.env.PGHOST) {
+  // Production: PostgreSQL
+  const options = {
     dialect: 'postgres',
     logging: false,
     pool: {
       max: 10,
-      min: 0,           // לא ליצור חיבורים עד שצריך
-      acquire: 60_000,  // המתן עד דקה
+      min: 0,
+      acquire: 30_000,
       idle: 10_000,
     },
-    dialectOptions: sslConfig ? { ssl: sslConfig } : {},
-  });
+  };
+
+  if (DB_CONN) {
+    sequelize = new Sequelize(DB_CONN, options);
+  } else {
+    // PG* variables (Railway private network)
+    sequelize = new Sequelize(
+      process.env.PGDATABASE || 'railway',
+      process.env.PGUSER || 'postgres',
+      process.env.PGPASSWORD,
+      {
+        ...options,
+        host: process.env.PGHOST,
+        port: parseInt(process.env.PGPORT || '5432'),
+      }
+    );
+  }
 } else {
   // Development: SQLite
   sequelize = new Sequelize({
