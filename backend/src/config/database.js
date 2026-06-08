@@ -3,9 +3,11 @@ const path = require('path');
 
 let sequelize;
 
-if (process.env.DB_URL) {
+// תמיכה ב-DB_URL (מקומי) ו-DATABASE_URL (Railway)
+const DB_CONN = process.env.DB_URL || process.env.DATABASE_URL;
+if (DB_CONN) {
   // Production: PostgreSQL
-  sequelize = new Sequelize(process.env.DB_URL, {
+  sequelize = new Sequelize(DB_CONN, {
     dialect: 'postgres',
     logging: false,
     pool: {
