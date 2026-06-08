@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --orange: #FF6B35; --navy: #0A0F1E; --green: #10B981;
+  --border: rgba(255,255,255,0.08); --card: rgba(255,255,255,0.04);
+}
+html { font-family: 'Inter', sans-serif; }
+body { background: var(--navy); color: white; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+@keyframes pulse-ring { 0% { transform:scale(0.8);opacity:0.8; } 100% { transform:scale(2.2);opacity:0; } }
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes fade-up { from { transform:translateY(12px);opacity:0; } to { transform:translateY(0);opacity:1; } }
+@keyframes glow { 0%,100% { box-shadow:0 0 20px rgba(255,107,53,0.3); } 50% { box-shadow:0 0 40px rgba(255,107,53,0.6); } }
+@keyframes countdown { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+.fade-up { animation: fade-up 0.3s ease both; }
+.live-dot { width:8px;height:8px;border-radius:50%;background:#10B981;position:relative;display:inline-block; }
+.live-dot::after { content:'';position:absolute;inset:0;border-radius:50%;background:#10B981;animation:pulse-ring 1.5s ease-out infinite; }
+.input-field { background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.1);color:white;border-radius:12px;padding:12px 16px;font-family:inherit;font-size:15px;width:100%;outline:none;transition:all 0.2s; }
+.input-field:focus { border-color:#FF6B35;box-shadow:0 0 0 3px rgba(255,107,53,0.15); }
+.input-field::placeholder { color:rgba(255,255,255,0.25); }
+.btn-orange { background:linear-gradient(135deg,#FF6B35,#FF4444);color:white;border:none;border-radius:12px;font-weight:800;cursor:pointer;font-family:inherit;transition:all 0.2s; }
+.btn-orange:hover { transform:translateY(-1px);box-shadow:0 8px 25px rgba(255,107,53,0.4); }
+.btn-orange:disabled { opacity:0.5;cursor:not-allowed;transform:none!important; }
+.card { background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:18px;transition:all 0.2s; }
+.card:hover { background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.12); }

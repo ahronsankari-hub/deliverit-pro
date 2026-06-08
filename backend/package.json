@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev":   "node src/server.js",
+    "seed":  "node seed.js",
+    "test":  "echo \"no tests\" && exit 0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.6",
+    "crypto": "^1.0.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.10",
+    "pdfkit": "^0.19.0",
+    "pg": "^8.21.0",
+    "pg-hstore": "^2.3.4",
+    "redis": "^6.0.0",
+    "sequelize": "^6.37.8",
+    "socket.io": "^4.8.3",
+    "stripe": "^22.2.0",
+    "uuid": "^14.0.0",
+    "web-push": "^3.6.7",
+    "winston": "^3.19.0"
+  }
+}
