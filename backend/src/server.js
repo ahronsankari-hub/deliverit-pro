@@ -121,16 +121,17 @@ setInterval(closeExpiredTenders, 30_000);
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
-// alter:true ב-SQLite מוחק נתונים (recreate table) — משתמשים ב-sync() רגיל
-// הוספת עמודות חדשות נעשית ע"י seed.js (force:true) בסביבת dev
-sequelize.sync().then(async () => {
-  await createRedisAdapter(io);
-  httpServer.listen(PORT, () => {
-    logger.info(`DeliverIt Pro API started`, { port: PORT, env: process.env.NODE_ENV, db: process.env.DB_URL ? 'PostgreSQL' : 'SQLite' });
+// מאזינים לפורט קודם — Railway צריך לראות שהשרת עונה מיד
+// ה-DB sync רץ ברקע ולא חוסם את ה-healthcheck
+httpServer.listen(PORT, () => {
+  logger.info(`DeliverIt Pro API started`, { port: PORT, env: process.env.NODE_ENV });
+  // sync ב-PostgreSQL — מוסיף עמודות חסרות, לא מוחק נתונים
+  sequelize.sync().then(async () => {
+    await createRedisAdapter(io);
+    logger.info('DB sync complete, Redis ready');
+  }).catch((err) => {
+    logger.error('DB sync failed — server still running', { error: err.message });
   });
-}).catch((err) => {
-  logger.error('Failed to start server', { error: err.message });
-  process.exit(1);
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
