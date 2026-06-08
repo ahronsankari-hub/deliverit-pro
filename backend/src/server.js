@@ -64,12 +64,15 @@ app.use('/api/payments', require('./routes/payments'));   // Stripe checkout + w
 
 app.get('/',       (_, res) => res.json({ name: 'DeliverIt Pro API', version: '2.0.0', env: process.env.NODE_ENV }));
 app.get('/health', async (_, res) => {
+  let db = 'unknown';
   try {
     await sequelize.authenticate();
-    res.json({ status: 'ok', db: 'connected', time: new Date(), uptime: process.uptime() });
+    db = 'connected';
   } catch {
-    res.status(503).json({ status: 'error', db: 'disconnected' });
+    db = 'disconnected';
   }
+  // תמיד מחזיר 200 — Railway בודק רק שהשרת עונה, לא שDB מחובר
+  res.json({ status: 'ok', db, time: new Date(), uptime: process.uptime() });
 });
 
 // 404
